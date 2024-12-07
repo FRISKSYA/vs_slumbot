@@ -1,15 +1,13 @@
-# src/strategy/factory.py
-
-from typing import Dict
+from typing import Dict, Type
 from .base_strategy import BaseStrategy, StrategyType
-from .allin_strategy import AllinStrategy
 from .simple_strategy import SimpleStrategy
 from .aggressive_strategy import AggressiveStrategy
 from .tight_strategy import TightStrategy
+from .allin_strategy import AllinStrategy
 
 def create_strategy(strategy_type: str) -> BaseStrategy:
     """Factory function to create strategy instances"""
-    strategies: Dict[str, type] = {
+    strategies: Dict[str, Type[BaseStrategy]] = {
         StrategyType.SIMPLE.value: SimpleStrategy,
         StrategyType.AGGRESSIVE.value: AggressiveStrategy,
         StrategyType.TIGHT.value: TightStrategy,
