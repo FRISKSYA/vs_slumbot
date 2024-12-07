@@ -13,9 +13,15 @@ class SessionAnalyzer:
         
     def record_hand(self, hand_winnings):
         """Record the results of a single hand"""
-        self.hands_played += 1
-        self.cumulative_winnings += hand_winnings
-        self.winnings_history.append(self.cumulative_winnings)
+        try:
+            self.hands_played += 1
+            self.cumulative_winnings += hand_winnings
+            self.winnings_history.append(self.cumulative_winnings)
+            logging.debug(f"Recorded hand {self.hands_played}: "
+                        f"Winnings={hand_winnings}, "
+                        f"Cumulative={self.cumulative_winnings}")
+        except Exception as e:
+            logging.error(f"Error recording hand: {str(e)}")
         
     def create_graph(self, save_dir):
         """Create and save the winnings graph"""

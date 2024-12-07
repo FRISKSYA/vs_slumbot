@@ -1,7 +1,17 @@
 # src/strategy/base_strategy.py
 
-from typing import Dict, List, Optional, Tuple
-import logging
+from enum import Enum
+from typing import Dict, List
+
+class StrategyType(Enum):
+    SIMPLE = "simple"
+    AGGRESSIVE = "aggressive"
+    TIGHT = "tight"
+    ALLIN = "allin"
+    
+    @classmethod
+    def list_names(cls) -> List[str]:
+        return [strategy.value for strategy in cls]
 
 class BaseStrategy:
     """Base class for poker playing strategies"""
@@ -17,7 +27,6 @@ class BaseStrategy:
         Decides the next action based on the current game state
         Returns: 'f' (fold), 'c' (call), 'k' (check), or 'b' + amount (bet/raise)
         """
-        # This should be overridden by concrete strategy classes
         raise NotImplementedError
         
     def update_game_state(self, game_state: Dict) -> None:
@@ -40,24 +49,3 @@ class BaseStrategy:
             return 3  # River
         else:
             raise ValueError(f"Invalid board length: {board_length}")
-
-class SimpleStrategy(BaseStrategy):
-    """Simple strategy implementation (current sample logic)"""
-    
-    def decide_action(self, game_state: Dict) -> str:
-        """Implements the current sample strategy of always check/call"""
-        self.update_game_state(game_state)
-        
-        # Parse the current action string
-        from sample.slumbot_api import ParseAction  # Temporary until we refactor this
-        action_info = ParseAction(self.current_action)
-        
-        if 'error' in action_info:
-            logging.error(f"Error parsing action: {action_info['error']}")
-            return 'f'  # Default to fold in case of error
-            
-        # Implement the simple "always check/call" strategy
-        if action_info['last_bettor'] != -1:
-            return 'c'  # Call if there's a bet
-        else:
-            return 'k'  # Check if no bet
