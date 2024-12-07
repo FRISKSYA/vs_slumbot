@@ -12,7 +12,8 @@ sys.path.append(str(project_root))
 
 from sample.slumbot_api import PlayHand, Login, NewHand, Act  # NewHand, Actを追加
 from analysis.session_analyzer import SessionAnalyzer
-from strategy.base_strategy import SimpleStrategy
+from strategy.base_strategy import StrategyType 
+from strategy.factory import create_strategy 
 
 def create_session_directory():
     """Create a new directory for the current session"""
@@ -54,41 +55,66 @@ def setup_logging(session_dir, verbose=False):
     
     return log_file
 
-def play_session(num_hands, username=None, password=None):
+def play_session(num_hands, username=None, password=None, strategy_type='simple'):
     """Play a session of poker hands"""
     analyzer = SessionAnalyzer()
-    strategy = SimpleStrategy()  # 戦略クラスのインスタンス化
+    strategy = create_strategy(strategy_type)
     
     # Initialize session
     token = None
     if username and password:
         logging.info("Logging in with provided credentials...")
         token = Login(username, password)
+
+    hands_completed = 0
+    last_progress_report = -1  # 最後に進捗を報告したハンド数
     
-    # Play hands
     try:
-        progress_interval = max(1, num_hands // 20)
-        for i in range(num_hands):
-            # Get game state
-            if i == 0 or 'winnings' in game_state:
-                game_state = NewHand(token)
-                token = game_state.get('token', token)
-                if 'winnings' in game_state:
-                    analyzer.record_hand(game_state['winnings'])
-            else:
+        # Start first hand
+        game_state = NewHand(token)
+        token = game_state.get('token', token)
+        
+        while hands_completed < num_hands:
+            try:
+                # 現在のゲーム状態に基づいてアクションを決定
                 action = strategy.decide_action(game_state)
+                
+                # アクションを実行
                 game_state = Act(token, action)
                 token = game_state.get('token', token)
+                
+                # ハンドが終了したかチェック
                 if 'winnings' in game_state:
-                    analyzer.record_hand(game_state['winnings'])
-            
-            if (i + 1) % progress_interval == 0:
-                progress = (i + 1) / num_hands * 100
-                logging.info(f"Progress: {progress:.1f}% ({i + 1}/{num_hands} hands)")
+                    winnings = game_state['winnings']
+                    analyzer.record_hand(winnings)
+                    hands_completed += 1
+                    
+                    # 進捗の表示（10%単位でのみ表示）
+                    current_progress = (hands_completed * 10) // num_hands
+                    if current_progress > last_progress_report:
+                        progress_percentage = (hands_completed / num_hands) * 100
+                        logging.info(f"Progress: {progress_percentage:.1f}% ({hands_completed}/{num_hands} hands)")
+                        last_progress_report = current_progress
+                    
+                    # 次のハンドを開始（ただし最後のハンドの場合は除く）
+                    if hands_completed < num_hands:
+                        game_state = NewHand(token)
+                        token = game_state.get('token', token)
+                
+            except Exception as e:
+                logging.error(f"Error during hand: {str(e)}")
+                # エラーが発生した場合は新しいハンドを開始
+                game_state = NewHand(token)
+                token = game_state.get('token', token)
+                continue
                 
     except Exception as e:
         logging.error(f"Error occurred during play: {str(e)}")
     finally:
+        # 最終進捗の表示（100%に達していない場合）
+        if hands_completed == num_hands and last_progress_report != 10:
+            logging.info(f"Progress: 100.0% ({num_hands}/{num_hands} hands)")
+        
         stats = analyzer.get_statistics()
         if stats:
             logging.info("Session Statistics:")
@@ -105,6 +131,9 @@ def main():
                         help='Number of hands to play (default: 100)')
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='Enable verbose output')
+    parser.add_argument('--strategy', type=str, default='simple',
+                        choices=StrategyType.list_names(),  # 利用可能な戦略の一覧
+                        help='Strategy to use for playing')
     
     args = parser.parse_args()
     
@@ -114,10 +143,16 @@ def main():
     
     logging.info("Starting poker session...")
     logging.info(f"Number of hands to play: {args.hands}")
+    logging.info(f"Using strategy: {args.strategy}")
     
     # Play poker session
     try:
-        analyzer = play_session(args.hands, args.username, args.password)
+        analyzer = play_session(
+            args.hands,
+            args.username,
+            args.password,
+            strategy_type=args.strategy
+        )
         
         # Create and save graph in session directory
         graph_path = analyzer.create_graph(session_dir)
@@ -127,7 +162,7 @@ def main():
         logging.info("Session complete.")
         
         # Print final results to console regardless of verbose mode
-        if analyzer.winnings_history:  # 結果がある場合のみ表示
+        if analyzer.winnings_history:
             print(f"\nSession complete - Final results:")
             print(f"Total hands played: {args.hands}")
             print(f"Final balance: {analyzer.cumulative_winnings:,} chips")
