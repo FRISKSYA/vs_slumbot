@@ -1,30 +1,41 @@
+# src/main.py
+
 import argparse
 import sys
 import logging
 from pathlib import Path
+from datetime import datetime
 
 # Add the project root directory to Python path to enable imports
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
 from sample.slumbot_api import PlayHand, Login
+from analysis.session_analyzer import SessionAnalyzer
 
 def setup_logging():
     """Set up basic logging configuration"""
     log_dir = project_root / 'logs'
     log_dir.mkdir(exist_ok=True)
     
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_file = log_dir / f'poker_session_{timestamp}.log'
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_dir / 'poker_session.log'),
+            logging.FileHandler(log_file),
             logging.StreamHandler(sys.stdout)
         ]
     )
+    
+    return log_dir
 
 def play_session(num_hands, username=None, password=None):
     """Play a session of poker hands"""
+    analyzer = SessionAnalyzer()
+    
     # Initialize session
     token = None
     if username and password:
@@ -32,23 +43,23 @@ def play_session(num_hands, username=None, password=None):
         token = Login(username, password)
     
     # Play hands
-    total_winnings = 0
-    hands_played = 0
-    
     try:
         for i in range(num_hands):
             logging.info(f"Playing hand {i+1}/{num_hands}")
             token, hand_winnings = PlayHand(token)
-            total_winnings += hand_winnings
-            hands_played += 1
+            analyzer.record_hand(hand_winnings)
             logging.info(f"Hand {i+1} completed. Winnings: {hand_winnings}. "
-                        f"Total so far: {total_winnings}")
+                        f"Total so far: {analyzer.cumulative_winnings}")
     except Exception as e:
         logging.error(f"Error occurred during play: {str(e)}")
     finally:
-        logging.info(f"Session completed. Played {hands_played} hands.")
-        logging.info(f"Final total winnings: {total_winnings}")
-        return total_winnings
+        stats = analyzer.get_statistics()
+        if stats:
+            logging.info("Session Statistics:")
+            for key, value in stats.items():
+                logging.info(f"{key}: {value}")
+        
+        return analyzer
 
 def main():
     parser = argparse.ArgumentParser(description='Poker Bot vs Slumbot')
@@ -60,13 +71,19 @@ def main():
     args = parser.parse_args()
     
     # Setup logging
-    setup_logging()
+    log_dir = setup_logging()
     logging.info("Starting poker session...")
     
     # Play poker session
     try:
-        total_winnings = play_session(args.hands, args.username, args.password)
-        logging.info(f"Session complete. Total winnings: {total_winnings}")
+        analyzer = play_session(args.hands, args.username, args.password)
+        
+        # Create and save graph
+        graph_path = analyzer.create_graph(log_dir)
+        if graph_path:
+            logging.info(f"Session graph saved to: {graph_path}")
+            
+        logging.info("Session complete.")
     except KeyboardInterrupt:
         logging.info("Session interrupted by user.")
     except Exception as e:
