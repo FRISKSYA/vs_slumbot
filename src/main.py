@@ -13,14 +13,23 @@ sys.path.append(str(project_root))
 from sample.slumbot_api import PlayHand, Login
 from analysis.session_analyzer import SessionAnalyzer
 
-def setup_logging():
-    """Set up basic logging configuration"""
-    log_dir = project_root / 'logs'
-    log_dir.mkdir(exist_ok=True)
-    
+def create_session_directory():
+    """Create a new directory for the current session"""
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    log_file = log_dir / f'poker_session_{timestamp}.log'
+    session_name = f"session_{timestamp}"
+    session_dir = project_root / 'logs' / session_name
+    session_dir.mkdir(parents=True, exist_ok=True)
+    return session_dir
+
+def setup_logging(session_dir):
+    """Set up logging configuration for the session"""
+    log_file = session_dir / 'session.log'
     
+    # Remove any existing handlers
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
+    
+    # Configure logging
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -30,7 +39,10 @@ def setup_logging():
         ]
     )
     
-    return log_dir
+    logging.info(f"Session directory created at: {session_dir}")
+    logging.info(f"Log file: {log_file}")
+    
+    return log_file
 
 def play_session(num_hands, username=None, password=None):
     """Play a session of poker hands"""
@@ -70,16 +82,19 @@ def main():
     
     args = parser.parse_args()
     
-    # Setup logging
-    log_dir = setup_logging()
+    # Create session directory and setup logging
+    session_dir = create_session_directory()
+    setup_logging(session_dir)
+    
     logging.info("Starting poker session...")
+    logging.info(f"Number of hands to play: {args.hands}")
     
     # Play poker session
     try:
         analyzer = play_session(args.hands, args.username, args.password)
         
-        # Create and save graph
-        graph_path = analyzer.create_graph(log_dir)
+        # Create and save graph in session directory
+        graph_path = analyzer.create_graph(session_dir)
         if graph_path:
             logging.info(f"Session graph saved to: {graph_path}")
             

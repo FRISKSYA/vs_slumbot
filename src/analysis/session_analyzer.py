@@ -17,7 +17,7 @@ class SessionAnalyzer:
         self.cumulative_winnings += hand_winnings
         self.winnings_history.append(self.cumulative_winnings)
         
-    def create_graph(self, save_dir=None):
+    def create_graph(self, save_dir):
         """Create and save the winnings graph"""
         if not self.winnings_history:
             logging.warning("No hand data available for graph creation")
@@ -64,14 +64,7 @@ class SessionAnalyzer:
         )
         
         # Save the graph
-        if save_dir is None:
-            save_dir = Path('logs')
-        save_dir = Path(save_dir)
-        save_dir.mkdir(exist_ok=True)
-        
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        graph_path = save_dir / f'session_graph_{timestamp}.png'
-        
+        graph_path = save_dir / 'session_graph.png'
         plt.savefig(graph_path, dpi=300, bbox_inches='tight')
         plt.close()
         
