@@ -4,6 +4,8 @@ from .simple_strategy import SimpleStrategy
 from .aggressive_strategy import AggressiveStrategy
 from .tight_strategy import TightStrategy
 from .allin_strategy import AllinStrategy
+from .cfr_strategy import CFRStrategy
+from .deeplearning_strategy import DeepLearningStrategy
 
 def create_strategy(strategy_type: str) -> BaseStrategy:
     """Factory function to create strategy instances"""
@@ -11,7 +13,9 @@ def create_strategy(strategy_type: str) -> BaseStrategy:
         StrategyType.SIMPLE.value: SimpleStrategy,
         StrategyType.AGGRESSIVE.value: AggressiveStrategy,
         StrategyType.TIGHT.value: TightStrategy,
-        StrategyType.ALLIN.value: AllinStrategy
+        StrategyType.ALLIN.value: AllinStrategy,
+        StrategyType.CFR.value: CFRStrategy,
+        StrategyType.DEEP_LEARNING.value: DeepLearningStrategy
     }
     
     strategy_class = strategies.get(strategy_type)

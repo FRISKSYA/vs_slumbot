@@ -8,6 +8,9 @@ class StrategyType(Enum):
     AGGRESSIVE = "aggressive"
     TIGHT = "tight"
     ALLIN = "allin"
+    CFR = "cfr"
+    DEEP_LEARNING = "deep_learning"
+    
     
     @classmethod
     def list_names(cls) -> List[str]:
