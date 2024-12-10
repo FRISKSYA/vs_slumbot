@@ -17,6 +17,15 @@ class SessionAnalyzer:
         self.cumulative_winnings += hand_winnings
         self.winnings_history.append(self.cumulative_winnings)
         
+    def merge_results(self, other_analyzer):
+        """Merge results from another analyzer"""
+        for winnings in other_analyzer.winnings_history:
+            # 相対的な収支を計算して追加
+            relative_winnings = winnings - other_analyzer.winnings_history[0] + (self.cumulative_winnings if self.winnings_history else 0)
+            self.winnings_history.append(relative_winnings)
+            
+        self.cumulative_winnings = self.winnings_history[-1] if self.winnings_history else 0
+        self.hands_played += other_analyzer.hands_played
     def create_graph(self, save_dir):
         """Create and save the winnings graph"""
         if not self.winnings_history:

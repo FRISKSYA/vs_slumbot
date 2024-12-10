@@ -10,12 +10,11 @@ from datetime import datetime
 project_root = Path(__file__).resolve().parent.parent
 sys.path.append(str(project_root))
 
-from sample.slumbot_api import PlayHand, Login, NewHand, Act  # NewHand, Actを追加
-from analysis.session_analyzer import SessionAnalyzer
-from strategy.base_strategy import SimpleStrategy
+from strategy.base_strategy import StrategyType
+from session.session_manager import SessionManager
 
 def create_session_directory():
-    """Create a new directory for the current session"""
+    """セッションディレクトリの作成"""
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     session_name = f"session_{timestamp}"
     session_dir = project_root / 'logs' / session_name
@@ -23,79 +22,19 @@ def create_session_directory():
     return session_dir
 
 def setup_logging(session_dir, verbose=False):
-    """Set up logging configuration for the session"""
+    """ロギングの設定"""
     log_file = session_dir / 'session.log'
     
-    # Remove any existing handlers
-    for handler in logging.root.handlers[:]:
-        logging.root.removeHandler(handler)
-    
-    # File handler - always logs everything
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.INFO)
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-    
-    # Console handler - only logs progress updates
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.INFO if verbose else logging.WARNING)
-    console_handler.setFormatter(logging.Formatter('%(message)s'))
-    
-    # Custom filter for progress updates
-    class ProgressFilter(logging.Filter):
-        def filter(self, record):
-            return 'Progress' in record.msg or record.levelno >= logging.WARNING
-
-    console_handler.addFilter(ProgressFilter())
-    
-    # Configure root logger
-    logging.root.setLevel(logging.INFO)
-    logging.root.addHandler(file_handler)
-    logging.root.addHandler(console_handler)
+    logging.basicConfig(
+        level=logging.INFO if verbose else logging.WARNING,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file),
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
     
     return log_file
-
-def play_session(num_hands, username=None, password=None):
-    """Play a session of poker hands"""
-    analyzer = SessionAnalyzer()
-    strategy = SimpleStrategy()  # 戦略クラスのインスタンス化
-    
-    # Initialize session
-    token = None
-    if username and password:
-        logging.info("Logging in with provided credentials...")
-        token = Login(username, password)
-    
-    # Play hands
-    try:
-        progress_interval = max(1, num_hands // 20)
-        for i in range(num_hands):
-            # Get game state
-            if i == 0 or 'winnings' in game_state:
-                game_state = NewHand(token)
-                token = game_state.get('token', token)
-                if 'winnings' in game_state:
-                    analyzer.record_hand(game_state['winnings'])
-            else:
-                action = strategy.decide_action(game_state)
-                game_state = Act(token, action)
-                token = game_state.get('token', token)
-                if 'winnings' in game_state:
-                    analyzer.record_hand(game_state['winnings'])
-            
-            if (i + 1) % progress_interval == 0:
-                progress = (i + 1) / num_hands * 100
-                logging.info(f"Progress: {progress:.1f}% ({i + 1}/{num_hands} hands)")
-                
-    except Exception as e:
-        logging.error(f"Error occurred during play: {str(e)}")
-    finally:
-        stats = analyzer.get_statistics()
-        if stats:
-            logging.info("Session Statistics:")
-            for key, value in stats.items():
-                logging.info(f"{key}: {value}")
-        
-        return analyzer
 
 def main():
     parser = argparse.ArgumentParser(description='Poker Bot vs Slumbot')
@@ -103,35 +42,50 @@ def main():
     parser.add_argument('--password', type=str, help='Password for Slumbot API')
     parser.add_argument('--hands', type=int, default=100,
                         help='Number of hands to play (default: 100)')
+    parser.add_argument('--chunk-size', type=int, default=1000,
+                        help='Number of hands per chunk (default: 1000)')
+    parser.add_argument('--strategy', type=str, default='simple',
+                        choices=StrategyType.list_names(),
+                        help='Strategy to use for playing (default: simple)')
     parser.add_argument('--verbose', '-v', action='store_true',
                         help='Enable verbose output')
     
     args = parser.parse_args()
     
-    # Create session directory and setup logging
+    # セッションの準備
     session_dir = create_session_directory()
     setup_logging(session_dir, args.verbose)
     
     logging.info("Starting poker session...")
     logging.info(f"Number of hands to play: {args.hands}")
+    logging.info(f"Chunk size: {args.chunk_size}")
+    logging.info(f"Using strategy: {args.strategy}")
     
-    # Play poker session
+    # セッションの実行
     try:
-        analyzer = play_session(args.hands, args.username, args.password)
+        session = SessionManager(
+            total_hands=args.hands,
+            strategy_type=args.strategy,
+            chunk_size=args.chunk_size,
+            username=args.username,
+            password=args.password
+        )
         
-        # Create and save graph in session directory
+        analyzer = session.run()
+        
+        # グラフの作成と保存
         graph_path = analyzer.create_graph(session_dir)
         if graph_path:
             logging.info(f"Session graph saved to: {graph_path}")
             
         logging.info("Session complete.")
         
-        # Print final results to console regardless of verbose mode
-        if analyzer.winnings_history:  # 結果がある場合のみ表示
+        # 結果の表示
+        if analyzer.winnings_history:
             print(f"\nSession complete - Final results:")
-            print(f"Total hands played: {args.hands}")
+            print(f"Total hands played: {analyzer.hands_played}")
             print(f"Final balance: {analyzer.cumulative_winnings:,} chips")
-            print(f"Average per hand: {analyzer.cumulative_winnings/args.hands:,.1f}")
+            print(f"Average per hand: {analyzer.cumulative_winnings/analyzer.hands_played:,.1f}")
             print(f"Session files saved in: {session_dir}")
         
     except KeyboardInterrupt:
